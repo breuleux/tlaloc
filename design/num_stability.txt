@@ -1,0 +1,145 @@
+
+.. _stability:
+
+===================
+Numerical stability
+===================
+
+There are two issues about numerical stability that we might want to
+improve.
+
+1) Catastrophical failure when computations "blow up" to infinity.
+
+2) Loss of numeric precision which nonetheless stays within the bounds
+   of representable numbers.
+
+However, all in all, this seems to be a quite difficult task. The
+first problem is identifying where there might be a problem. The
+second problem is solving it. Neither task is trivial.
+
+There are several ideas that *might* help:
+
+1) Provide data types that include uncertainty information.
+
+   a) Compute [min, max] ranges, starting with a difference in the
+      least significant bit. This would be best to indicate how off
+      the results might be, but it's only really tractable for
+      combinations of monotonously increasing or decreasing
+      functions. Simply computing f(min) and f(max) would fail
+      spectacularly on several functions, sin(x) for instance.
+
+   b) Inferring a +- range around x (upper bound). Suffers from the
+      same problems as a), trades accuracy for greater efficiency.
+
+2) Provide arbitrary precision data types. Problem: they are bound to
+   be horribly inefficient.
+
+   a) Cheaper strategy, but mostly to prevent blow-ups: a floating
+      point data type supporting arbitrarily large exponents. I am
+      somewhat skeptical that it's possible to do it without getting a
+      noticeable performance hit, but it's not completely crazy. There
+      is enough room in a double-precision NaN to fit a 51-bit
+      pointer, so it's possible to have zero space overhead for the
+      normal double range and tuck in a "big double" pointer in a NaN
+      (alternatively, use the space to store a large exponent and
+      allocate 64 bits of "emergency mantissa" next to each double, or
+      vice versa). The overhead would be low outside of what would be
+      a total failure otherwise, anyway.
+
+3) Try to replace problematic functions by more stable versions.
+
+   a) Keep a database of patterns that can be substituted for other,
+      more stable patterns. This is what Theano does. Problem: there
+      are many ways to encode the same function, and each new case has
+      to be manually handled.
+
+   b) Estimating the problematic parts of the domain by a
+      spline. Problems: identifying the problematic parts, and then
+      guaranteeing that the fit is good on every single point of the
+      domain. Note that In many cases, we can actually compute the
+      derivatives of the function, and that can probably help to some
+      extent.
+
+I would tend to prefer a mixture of 3a and 3b, but I'd like to
+investigate 2a as well.
+
+
+Preventing blow ups
+===================
+
+Arguably, this is most important, because it can make or break an
+algorithm, often crippling a significant range of its domain.
+
+Univariate functions
+--------------------
+
+The idea would be to automatically convert functions into piecewise
+versions of themselves. Essentially, use linear or spline
+interpolation on the part of the domain where computations might blow
+up, when possible.
+
+Let f(x) be a function of x defined with other primitives. For
+instance, f(x) = log(1 + exp(x)). This function has an asymptote at
+y=x, but double precision blows up around x = 710. The process to
+solve this issue would essentially comprise the following steps:
+
+1) Figure out critical parts of the domain where computation might
+   blow up: here, x >= 710. This does not seem too difficult.
+
+2) Sample this domain and compute f(x) using arbitrary precision
+   arithmetic.
+
+3) Fit a spline to the samples. The ability to compute derivatives
+   does help here (Taylor series).
+
+4) Verify that the fit is good:
+
+   a) Check the error on new samples. Kind of sounds like a recipe for
+      disaster, to be honest - we can't afford to flatten a narrow
+      peak.
+
+   b) Try to verify analytically that the deviation from the spline
+      will not exceed epsilon. This does not seem trivial, but it is
+      probably doable for functions of interest?
+
+5) Replace the subgraph by a version of the function that switches
+   between the proper formula and the spline depending on the value of
+   x.
+
+I would say that all univariate functions with simple asymptotes
+(esp. constant or linear) can be efficiently taken care of by this
+technique. Complex asymptotes seem contrived in practical situations,
+so it is less important to fit them. It is already a lot to guarantee
+that if f(x) has a simple asymptote, blow ups will be prevented. On
+the other hand, handling multivariate expressions seems like it might
+be considerably harder.
+
+Note that the fit would not necessarily be on f(x) itself, because the
+blow up could be contained at several places. It suffices that a
+sub-expression in the definition of f(x) can be fitted. If several
+fits are possible, we can pick the best one, or the cheapest to
+compute.
+
+
+Multivariate functions
+----------------------
+
+Consider f(x, y) = exp(x) / (exp(x) + exp(y)) (a softmax with two
+variables, basically). It is easy to see that this function returns a
+value in the open range (0, 1), though we can accept rounding to the
+closed range [0, 1]. Now, the value of this function mostly depends on
+the difference between x and y: observe that f(x, y) = f(x-k, y-k) =
+f(x-max(x, y), y-max(x, y)), the latter of which will never blow
+up. It is not clear how the optimizer could actually figure out
+something like that, and heuristics that might lead it to the right
+answer in this case might fail in other cases (so unless they serve
+some other purpose, they are clutter).
+
+Another option would be, as in the univariate case, to fit a surface
+to the part of the domain that is problematic. However, this clearly
+does not scale to higher dimensionality, especially since we usually
+don't even know what the dimensionality will be (we might be doing a
+softmax of a thousand elements).
+
+TODO: keep going
+

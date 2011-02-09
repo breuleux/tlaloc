@@ -1,0 +1,124 @@
+
+.. _parallelism:
+
+===========
+Parallelism
+===========
+
+Most existing languages offer a memory model which is too simple to be
+realistic: that is, a program has a large pool of virtual memory it
+can refer to in any way it wishes. In reality, hardware provides a
+deep memory hierarchy: L1/2/3 caches, RAM, hard drive, and even
+network drives on remote nodes that are at varying distances from the
+program. In order to leverage this hierarchy, one should be able to
+properly allocate memory at each level so to minimize the distance
+between any piece of data and the processor which needs it at the
+moment. While there might be tricks to do so in a general setting, it
+seems that integrating these concerns into the language itself could
+help. The issue, of course, is how to do it as smoothly as possible.
+
+There seem to be several parallel programming languages popping in
+lately: X10_ (IBM), Chapel_ (Cray) seem to be active and fostering
+development. For the most part they seem to be using a PGAS
+(partitioned global address space) model where data may reside at
+different "places" or "locales", depending on terminology, and each of
+these locales is associated to a local thread or processor or group of
+processors. Computation may be performed on any data, but it is
+implied that there are costs involved in operating on non-local data.
+This is an interesting approach, but I feel that its scope is limited:
+implicitly, in that approach, each locale is a node in a homogenous
+cluster, with several cores and its own virtual addressing space. I do
+not think that heterogenous architectures (such as CPU+GPU+FGPA, for
+instance) are either well supported or well integrated. Also, the fact
+that there might be a memory hierarchy is eschewed: a CPU might have
+several levels of cache (which can and will impact performance if code
+is not tailored to it), a GPU might have a manually handled shared
+memory, an FPGA might have on-board memory, and so on.
+
+.. _X10: http://x10.codehaus.org/
+.. _Chapel: http://chapel.cray.com/tutorials.html
+
+There is an interesting language, `Sequoia++
+<http://sequoia.stanford.edu/>`__, which aims at tackling the memory
+hierarchy problem. They separate the description of the algorithm from
+the various tuning parameters (block sizes, etc.), which is
+sensible. They also have a paper_ describing a framework to auto-tune
+these parameters for various architectures. While I would go for a
+different interface, it is nonetheless pertinent prior art.
+
+.. _paper: http://theory.stanford.edu/%7Eaiken/publications/papers/pact08.pdf
+
+Essentially, what we would like to have is a high level description of
+computation which is agnostic about the available resources. We would
+compile this for an arbitrary "distributed target". The distributed
+target would be a set of processing units and a set of storage units,
+annotated with processing power, memory sizes, as well as
+representative "acquisition costs" from memory to processor and
+"transfer costs" from a memory to another. The compiler should be good
+enough to take care of this well enough that most users would not need
+more control.
+
+
+Splitting
+=========
+
+Given the framework described earlier, the deed would be done through
+special primitives that lend themselves to parallelism. The question
+is then, what would these primitives and how would they work?
+
+Consider writing a function on a large dataset D. If it can be
+parallelized, then typically you would be splitting D into several
+parts, feed these parts to processes, and combine the results in some
+way. Alas, how you split D may depend on how many processors are
+available; it may depend on the size of each memory in the hierarchy;
+it may depend on the cost of transferring data back and forth from a
+memory to another. The user should not have to care about any of these
+details - they should be optimized for him. What the user should be
+able to specify is first, of course, the range of acceptable splitting
+policies, and also what each processor should do on the data once it
+has been split. The exact split is then left to the discretion of the
+interpreter.
+
+The gist of the idea is that performance is optimized when a processor
+works as hard as possible on a subset as small as possible of the data
+- but the actual size of that subset is not necessarily
+known. Therefore, the user should be working with abstractions that
+essentially say: "split my data in chunks that have property X". Then,
+at compile time or at run time, the system would figure out a sweet
+spot for the size of these chunks, would make sure that they are put
+right where the processor can access them quickly, and would execute
+the user program on them. In a similar vein, a construct could
+dispatch processes on all the "neighbourhoods" in a data matrix, in
+such a way that performance decreases proportionally to how far a
+process goes from its origin. These primitives should be nestable,
+locality increasing as depth (in practice, this means the kernels
+should be able to use these primitives - though, clearly, some
+hardware is limited enough that not all primitives might map to it).
+
+This is attractive because it operates a sort of separation of
+concerns: on one hand, we have user code, which we can compile with
+handy assumptions, and on the other, we have to optimize allocation of
+code and data to a pool of resources. On the GPU, for instance, the
+user code would be compiled to instructions that only deal with
+registers and shared memory.
+
+
+Primitives
+==========
+
+I figure there are several possible primitives that would lend
+themselves well to parallelism while being transparent. Generically,
+something like PartitionMap(kernel, data, partition) could execute a
+kernel on data split accordingly to a partition function. The
+partition function would analyze information about the target and
+would automatically dispatch appropriate sub-structures to the various
+kernel instantiations. Depending on the partition function chosen, the
+substructures could be subtensors, contiguous memory chunks of
+variable length, elements filtered by some criterion, etc. This
+paradigm mostly addresses data parallelism and implementations of map,
+reduce, matrix multiplication, convolution, fft, etc.
+
+There is also some implicit parallelism to be gained, considering that
+Tlaloc does not specify any ordering for computation of independent
+expressions. These subgraphs could be executed in parallel.
+

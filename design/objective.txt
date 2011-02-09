@@ -1,0 +1,42 @@
+
+=========
+Objective
+=========
+
+In time, Tlaloc should allow one to define complex numerical
+algorithms such as neural networks, simulations, rendering and so
+forth. Given these programs, we expect to be able to do the following:
+
+1) Run them on an arbitrary set of heterogenous resources. In the most
+   general case, that would be a network of clusters, some of which
+   having a certain number of cores, a certain number of GPUs, and
+   perhaps eventually a certain number of FPGAs. The user's code
+   should be agnostic about the resources it will run on.
+
+2) Use user-provided as well as automatically inferred semantic
+   information in order to verify, optimize and specialize programs.
+
+3) Provide automated tools for:
+
+   a) The automatic differentiation of expressions.
+
+   b) Numeric stabilization of expressions.
+
+   c) Inference of several properties.
+
+In some sense, these objectives are independent as well as
+complementary. For instance, 2) and 3) would work quite well targeting
+a single CPU, but it seems that being able to work with time and
+memory complexity information can only help figuring out how to
+parallelize an algorithm.
+
+
+Requirements
+============
+
+* Target at least x86 CPUs and Nvidia cards.
+
+* At least Theano performance.
+
+* Compile functions that can be called from Python or C/C++ code.
+

@@ -1,0 +1,157 @@
+
+.. _inference:
+
+=========
+Inference
+=========
+
+
+Languages are often categorized as being either statically or
+dynamically typed. Static typing is a way to make time and space
+savings, since it eschews the need to have a type tag per object, and
+the need to check it at runtime - this reduction in overhead is useful
+if code ought to run quickly. It also catches some bugs at compile
+time, a feature that many programmers appreciate. For the purpose of
+inferring types at every node, static languages require the programmer
+to place type annotations.
+
+Dynamically typed languages, on the other hand, do not require any
+such annotations, and in fact often lack the syntax to place them
+(though this is easier to fix in languages that support true
+macros). Nonetheless, it is often possible to infer types from knowing
+the types of literal expressions and the return type of certain
+primitive functions. In theory, a lot can be inferred from there,
+though many languages throw a wrench in the process by allowing the
+user to shuffle around global function pointers, so that there may not
+even be a way to determine statically what function "fib(x)" calls
+(and when there is, it is expensive). This makes type inference - and
+for that matter, any inference at all - a living hell that we don't
+really want to go through.
+
+Tlaloc should not only make type inference easy - it should make all
+inference easy. Indeed, we wish to infer not only type, but the
+dimensionality, shape, strides of arrays, as well as time complexity,
+memory complexity, and who knows what else. Interestingly, this
+entails a model that is more flexible than a statically typed model:
+indeed, it is not always possible to infer the length of an array, nor
+complexity, nor a lot of things. If this is not a problem, then not
+being able to infer types should not be a problem either. The key
+property of the language we are designing, is that within it we should
+be able to infer everything that *should* be inferrable. Put in
+another way, if your function f is such that it is not possible to
+infer its return type given its arguments' types, then you are either
+using functionality for which types cannot be inferred, or you are
+doing something weird or unorthodox.
+
+
+Framework
+=========
+
+The idea is to pull inference functions from a database, accordingly
+to the following semantics::
+
+    g <- infer_db[f, [a, b], [c]]
+
+    c(f(x, y)) = g(a(x), b(y))
+
+
+For instance, for type inference::
+
+    type_f <- infer_db[f, [type, type], [type]]
+    
+    type(f(x, y)) = type_f(type(x), type(y))
+
+
+From an initial set of inferrers, associated to the proper functions,
+the properties of complex expressions can be derived. Reverse
+inference (inputs from outputs) can be done relatively elegantly
+through additional databases allowing us to retrieve inverses (when
+they exist!)::
+
+    g <- inverse_db[f]
+
+    g(f(x, y)) = [x, y]
+
+So::
+
+   type_in_f = inverse_db[infer_db[f, [type, type], [type]]]
+
+   [type(x), type(y)] = type_in_f(type(f(x, y)))
+
+
+Quantities that we might want to infer would be:
+
+* Result properties
+
+  * type
+
+  * multi-dimensional array properties:
+
+    * dimensionality
+
+    * size
+
+    * shape
+
+    * strides
+
+  * value ranges
+
+  * an upper bound on uncertainty
+  
+* Computation properties
+
+  * running time
+
+  * memory usage
+
+  * complexity
+
+  * presence of side effects
+
+For each of these quantities and each way to compose expressions,
+rules would have to be applied to infer the value for the expression
+from the values for its sub-expressions. For result properties this is
+sort of explicit (see the previous examples), for computation
+properties it might be a bit trickier, since you want to aggregate the
+properties of all nodes (e.g. sum times of all sub-calls).
+
+Interestingly, the inferrer functions could themselves be Tlaloc
+functions, although at first they would be written in the host
+language. There is a clear opportunity for meta-circularity (as well
+as an incentive, such as making use of inferrers in Tlaloc
+programs). They could also be primitives. Furthermore, the inference
+engine itself could fabricate Tlaloc functions (say, make a Tlaloc
+function to return the shape of the output of an MLP by composing the
+shape inferrers of the functions it calls).
+
+
+Semantic database
+=================
+
+In general, what we are looking at is a database (augmented through
+inference) semantically linking functions with other functions::
+
+   g <- db[f, inferrer[[identity, shape], [shape]]]
+   g <- db[f, inverse]     # g(f(x)) = x
+   g <- db[f, partial[y]]  # df/dy = g
+   g <- db[f, time]        # f(...) takes g(...) seconds to execute
+   g <- db[f, alloc]       # f(...) allocates g(...) bits of data
+   gs <- db[f, equiv]      # forall g in gs, forall x: f(x) = g(x)
+   gs <- db[f, sup]        # forall g in gs, forall x: f(x) < g(x)
+   gs <- db[f, close[eps]] # forall g in gs, forall x: |f(x) - g(x)| < eps
+   b <- db[f, commutative] # b is true iff f is commutative
+   etc.
+
+Pattern matching may be done on the second argument: if we seek to
+infer the shape of a variable, we will look at all inferrers that can
+produce it from various things we know. Although, at first, the
+inferrers might be written (and inferred) using the host language, it
+would be interesting to produce true Tlaloc functions as inferrers.
+
+Of course, many queries would return no results, but that does not
+reduce the usefulness of the information we *can* gather. Also, the
+examples given reach further than it would be reasonable to address at
+first, and it is not clear how to exploit most semantic information -
+nonetheless, it is desirable to have it.
+

@@ -1,0 +1,137 @@
+
+============
+Certificates
+============
+
+The basic idea behind certificates is to perform static checks on a
+function, which it can either pass or fail. This is meant in a broad
+sense, but certificates, for the most part, do fall under some
+discrete categories: preventing errors, maximizing performance and
+enforcing coding styles. The certification of a function will usually
+imply a similar certification for other functions (namely, the ones it
+calls).
+
+Note that certificate failure will often be non-binding: it is not
+because Tlaloc is incapable of doing type inference that there will be
+type errors. Certificates are meant to provide guarantees if there is
+an easy way to provide them, and to guide the user into coding
+"better" (that is, adapt their coding to please the certificator, but
+I would argue that it's often a good thing).
+
+
+Goal
+====
+
+There are two ideas behind certificates:
+
+The first one is that large projects using Tlaloc would make their own
+certificates, or combine existing ones, to enforce quality standards
+all over the code base. Since Tlaloc would work fine without any
+certificates, work in progress would never require them, thus
+providing a lot of flexibility over static languages. However, if
+committing changes to the master branch requires the satisfaction of
+criteria ABC (e.g. type safety), an effort has to be made to respect
+them. Note that if it is overtly difficult to certify a very important
+feature, it is always possible to make exceptions (and if it snowballs
+to adjoining modules, at least we know what's going on).
+
+The second idea is that many certificates pertain to Tlaloc's ability
+to infer things, which means that the more a function has, the more
+the compiler "understands" it and the more it can help. There is thus
+a strong motivation in "collecting" them.
+
+
+Guidance
+========
+
+As much as possible, certificates should provide guidance to the
+user. This should not be very difficult, since most of them would be
+inference based: it suffices that the certificate points out all the
+places where it cannot infer any further.
+
+More to the point, though, in general, certification should not be
+complicated enough that people would struggle to *understand* how it
+is done. Tedious, yes, but not "complicated". Ideally, there should be
+a set of instructions that people can follow in order to obtain
+certification, and failing that, it should be reasonably obvious
+whether it is possible or not.
+
+
+Certificate types
+=================
+
+No-error certificates
+---------------------
+
+A no-error certificate certifies whether the function will raise a
+particular error or not. A function will pass a certificate for the
+error E if and only if:
+
+1. There exists (at least) a set of input for which the function does
+   NOT raise E.
+
+2. For any other inputs, the function raises E *immediately*.
+
+For instance, a certificate against type errors guarantees that the
+function does not contain any intrinsic type errors, and that if the
+function is given inputs that have the wrong type, a type error will
+be produced certainly and immediately.
+
+Of course, this is not the only type of error that one could get a
+certificate about. For instance, one could attempt to verify that the
+function is shielded against shape mismatches: if mandated to verify
+this certificate, Tlaloc will essentially attempt to infer shapes for
+the whole function given the input shapes. Of course, usually, the
+shapes will not be known in advance, but thanks to condition 2. above,
+the certificate has to guarantee that if there is a mismatch, it will
+be known immediately.
+
+In practice, the "immediate" requirement means that there should be an
+O(1) function (and a reasonably fast one) of the inputs that
+determines whether the error will occur or not. Therefore, the latter
+certificate will only be obtained if Tlaloc can determine that the
+sufficient and necessary conditions for the error are (for example)
+that the second dimension of X must be the same as the second
+dimension of Y, must be twice the dimension of Z, and other easily
+verified conditions. Even if whether an error occurs can be verified
+within 1% of the total computation, the certificate might fail - the
+verification must not scale with the input size. If the user wishes to
+use a verificator that scales with input size, they could arguably
+produce one and pipe the inputs through it before using the function
+proper. The certificate really specifically aims to guarantee that
+there is an O(1) verificator.
+
+
+Performance certificates
+------------------------
+
+Performance certificates would aim to provide guarantees about
+complexity, running time, memory, possible hardware targets, and so
+forth. For instance, a "complexity certificate" could be obtained if
+Tlaloc is able to infer the time complexity of the algorithm for which
+the certificate is sought.
+
+Another possibility is a "no-gc certificate": if it is possible to
+determine statically the lifespan of all data, then there is no need
+for a garbage collector. "delete" instructions can be automatically
+inserted at the right places.
+
+I figure that a "numerical stability" certificate might enter this
+category, and would aim to guarantee that the output of a function
+(using float or double arithmetics) will always be within a certain
+delta of what it should be (if exact real arithmetics were used).
+
+
+Guideline certificates
+----------------------
+
+Guideline certificates would mean to guarantee that a certain program
+meets a set of coding guidelines. Since Tlaloc does not have syntax
+per se, this would be more in line with guaranteeing that only a set
+of approved functions are used, that some functions are preferred to
+some others, or that some functions are never used. Such a
+certificate, in Python, could for instance guarantee that
+"dict.iteritems()" is always used instead of "dict.items()". Other
+uses would be to ban any form of implicit numeric conversion,
+comparisons on floating point numbers, etc.
+

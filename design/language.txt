@@ -1,0 +1,159 @@
+
+.. _language:
+
+========
+Language
+========
+
+The language would not be defined at a syntax level, but at a higher
+level of abstraction (a computation graph). This is desirable, in so
+far that it eschews some of the problems one might have trying to map
+features to syntax constructs. While one could imagine a syntax for a
+new language designed to be parsed into Tlaloc's structures, there is
+no requirement that it should be as featureful - that is, the mapping
+from this hypothetical syntax to the intermediate language would not
+have to be surjective. The point here is that the design of a language
+is limited by linguistic, aesthetic and practical considerations that
+do not bind the design of an intermediate language.
+
+
+
+Core concepts
+=============
+
+Function
+--------
+
+A Function would be an entity taking a finite list of inputs and
+spewing out a finite list of outputs. It can either be a Primitive or
+a Definition, the latter of which is a graph linking the input and
+output ports of several Functions. There would be a semantic
+requirement that (x = y -> f(x) = f(y)), that is, a call on the same
+data always yields the same results. Side effects must be represented
+as a transformation of an IO input into a different IO output. (To be
+fair, though, these assumptions could be encoded in the database as
+is_pure(f) - and that might actually be an even better approach).
+
+It is worth noting that all Functions are statically known - calling
+functions dynamically would have to be done via a Call Function, which
+would have to collapse all outputs into a single tuple, since a
+Function cannot have a variable number of outputs depending on its
+inputs.
+
+A good way to put this framework into perspective is that most dynamic
+languages would have to map to a graph of NameLookup and Call
+Functions, and would often be incapable to do any better. Put in
+another way, the proposed system is similar to allowing the embedding
+of actual function pointers instead of symbols in the output of a
+Scheme macro.
+
+A last precision is that Tlaloc aims to be lazy. What this means is
+that if calling a function may be avoided, then whether to execute it
+or not is left at the discretion of the interpreter or compiler (which
+would ideally avoid execution). For this purpose, a Primitive may
+take, as an input, either data or a thunk that it has to execute in
+order to get data. Whether the primitive takes data or a thunk, of
+course, is part of the semantic information that must be associated to
+it. The onus is on the compiler to make sure to respect the calling
+conventions functions and primitives publicize. In this case, it also
+gets both the flexibility to cram as much as possible into a "thunk"
+and the power to compile functions that also take thunks (thus
+propagating the language's "laziness" through the call stack).
+
+
+Primitives
+++++++++++
+
+A Primitive is a Function that cannot be reduced to a graph of other
+functions and primitives. Different primitives can lead to different
+variants of Tlaloc, which are not evil per se, but ultimately we need
+a standard.
+
+
+
+Database
+--------
+
+The Database would be a semantic web linking functions to other
+functions. Rather than storing type information in a Function, a
+Function would be devised in order to compute type(out) given type(in)
+(see :ref:`inference`), and something like (f, g, "type_inferrer")
+would be inserted in the Database.
+
+The core Database would merely contain the information the programmer
+cares to provide. Additional information could of course be inferred
+from it, and inference might invalidate some of it (an exhaustive,
+user-provided set of type annotations can be self-inconsistent). Of
+course, there is always a danger the Database contains wrong
+information, and that Tlaloc greenlights wrong optimizations on the
+basis of flawed data, but that's the risk of flexibility.
+
+See :ref:`inference` for more information about the database's use.
+
+
+
+Literals
+--------
+
+Given the level of abstraction the language is at, and the assumption
+that a function returns the same outputs given the same inputs, a
+literal is the same as a nullary primitive with a single output. They
+make for a sort of static closure.
+
+
+Other language concepts
+=======================
+
+Error/exception handling
+------------------------
+
+A Tlaloc function may output an error code if an error occurs, through
+an additional output port for the error. A value returned on that port
+simply means that the function's real output(s) is(are) invalid -
+either erroneous, or pointing to garbage. The assumption that (x = y
+-> f(x) = f(y)) is "relaxed", in the sense that if f(x) is an error,
+then its primary output may change from an invocation to the
+other. This stems from the observation that returning different values
+for the same input is no more erroneous than using that value when an
+error is signaled.
+
+Warning ports are also an option, but in that case identical inputs
+must yield identical results.
+
+
+Ditching name spaces
+====================
+
+Another idea would be to move definitions from a changeable and
+ever-shifting name space to an immutable object space. It has already
+been mentioned that Functions would be known statically, but I would
+actually push much further than this, by making the source code itself
+immutable.
+
+What is meant by "immutable" is the following: if function f calls
+function g, but that for some reason the call to g has to become a
+call to h, then it is actually not allowed to modify the stored
+representation of f. Instead, a new function, f2, has to be created,
+which calls h instead of g. Furthermore, any function calling f has to
+be cloned in order to call f2 instead, and so forth. Removing f is
+then a matter of garbage collection, but a smarter move would be to
+archive it (ideally as a diff), and to annotate f2 as being the
+"successor" of f.
+
+Of course, automated tools could be devised to track and update
+dependencies. What is interesting about this model, though, is that it
+takes care of versioning remarkably well: any piece of code *can*
+point to old versions of any other piece of code. If an old piece of
+code is serialized or archived, it will still point to old versions of
+all of its dependencies, so no changes in the latter will impact it
+(nor would shipping it to a different machine). If these changes are
+desirable, they can be propagated back, and the old and updated
+versions can run at the same time, independently from each other.
+
+I would enjoy a language that lets me import stuff specifically from
+last January, lets me import a specific version of a package, or even
+lets me import a function from version 1.3 of a package and another
+function from version 2.0 of the same package, without any conflicts
+whatsoever. There are possible refinements on that idea, but the point
+still stands: why settle for the most recent version of a package when
+you could settle for all of them?

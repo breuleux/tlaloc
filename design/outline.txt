@@ -1,0 +1,156 @@
+
+=======
+Outline
+=======
+
+
+Language
+========
+
+The first step will be the design of the language. I envision a
+database-centric design. Defining a program would mean defining a set
+of functions (a function would just be a graph connecting the outputs
+of some functions to the inputs of some other functions, unbound
+inputs and outputs being the new function's own) and a set of
+relationships between them, such as "this function infers the types of
+this other function" or "this function is associative". A database of
+primitives would populate the pool of initial building blocks and
+would bootstrap inference. More in the :ref:`language` and
+:ref:`inference` sections.
+
+Following the design, the language's structures will be implemented,
+and a simple interpreter will be made to match the semantics. Tests
+will be done using toy primitives.
+
+Note: I believe it would make sense to use Python to do the
+implementation. I am quite familiar with the language already, and so
+is the LISA lab. There is also plenty of competition to compare
+ourselves to in a rather direct manner.
+
+
+
+Initial primitives
+==================
+
+A set of sufficient primitives will be devised. Some of these
+primitives should lend themselves to parallelization, even though
+actual parallelization would come later.
+
+Note that "primitive" merely means functions that come with code
+generators. Technically, there might be quite a lot of them, since a
+way to add a new type to the system might be to add a set of
+primitives to manipulate it and/or extract its fields.
+
+
+
+Inference
+=========
+
+The inference engine described :ref:`here <inference>` will then be
+implemented and tested. It will be important to verify that it does
+what we think it should be capable of doing. On an MLP, that would be
+inferring all types, all dimensionalities, all shapes, as well as
+memory usage, the number of flops, and a perfect garbage collection
+scheme for the algorithm.
+
+
+
+Compilation
+===========
+
+This step would see the implementation of a compiler capable of
+producing assembly.
+
+We don't want to compile to C code. It is messy, we have to work
+around its syntax, and computing strings just so that GCC can parse
+them and do a whole bunch of work that's already done is a huge waste.
+
+We want to target x86/SSE and PTX (Nvidia's assembler), but I would
+rather target LLVM, which has backends for both (though the PTX one is
+probably immature, but that will only improve). LLVM is basically
+meant to serve as a low level compilation target - if it is
+satisfactory, which it probably will be, then there is no point in
+going any lower.
+
+This step will necessitate data representations, calling conventions
+and a garbage collector (instead of piggybacking on Python's).
+
+
+
+Parallelization
+===============
+
+Parallelization should only come once everything runs smoothly on a
+single processor. If data flow is sufficiently restricted by the
+language, that parallelism-friendly primitives are used, and that the
+inference engine does what it is supposed to do, there should not be
+many issues (see :ref:`parallelism`).
+
+Here we would try to exploit multiple cores and GPUs on a single
+machine. Clusters can come later on.
+
+
+
+Semantic optimization
+=====================
+
+By semantic optimization, I mean replacing some expressions by other
+expressions that we know are equivalent. Theano does some of this, but
+it does so poorly. Tlaloc, on the other hand, would be built from the
+ground up to support generic inference engines, meaning that we could
+easily get more information in order to evaluate the expected cost of
+any changes.
+
+Unlike Theano, Tlaloc would not optimize a single graph of primitives
+(recursion would make this undoable, anyhow). This means it should
+have inlining heuristics - although LLVM might do some of the work,
+Tlaloc would have more static information to base an inlining policy
+on, and it would have the possibility to verify whether there might be
+useful optimizations to apply which happen to cross function
+boundaries (e.g. f(g(x)) where g(...) returns an exponential and
+f(...) computes the logarithm of its argument). This might be complex,
+though, and it might not even be worth it.
+
+I would like to have a large database of optimizations, each of which
+would have a set of "triggers", and a way to efficiently fetch
+potential optimizations for any node of a graph. This could be a
+matter of associating optimizations with a particular subgraph, or
+with a set of functions that are in the same neighbourhood, or even
+with a representation learned on common subgraphs. I don't really
+know. (TODO: move some of this text to its own section, when there's
+something to say).
+
+
+
+Others
+======
+
+Need to keep in mind
+--------------------
+
+* Profiling and debugging utilities.
+
+Future possibilities
+--------------------
+
+* Distribute computation on clusters.
+
+* Generic :ref:`numerical stability <stability>` optimizations
+  (generic enough to cover a class of simple situations, like
+  differentiable univariate functions - I don't mean miraculous).
+
+* Set up a repository for Tlaloc functions and their associated
+  semantic information.
+
+* Tlaloc "daemon" continuously seeking to improve the functions it
+  knows about.
+
+* Syntax for one or more languages that map to the Tlaloc
+  representation, to facilitate coding and testing. They don't
+  necessarily need to support its whole feature set.
+
+* Using statistical profiling information in optimization.
+
+* Re-coding critical operations in Tlaloc, paving the way for it to be
+  self-hosting.
+
