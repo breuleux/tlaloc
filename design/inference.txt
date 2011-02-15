@@ -78,6 +78,11 @@ So::
 
    [type(x), type(y)] = type_in_f(type(f(x, y)))
 
+In many cases, a, b and c would all be the same function (e.g. type,
+shape, etc.) but this may not always be the case. For instance, the
+shape of zeros(x) is x, so the inferrer is the identity function,
+therefore we have id = infer_db[zeros, [id], [shape]]. That is,
+id(id(x)) = shape(zeros(x)).
 
 Quantities that we might want to infer would be:
 
@@ -124,6 +129,7 @@ programs). They could also be primitives. Furthermore, the inference
 engine itself could fabricate Tlaloc functions (say, make a Tlaloc
 function to return the shape of the output of an MLP by composing the
 shape inferrers of the functions it calls).
+
 
 
 Semantic database

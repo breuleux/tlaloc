@@ -13,4 +13,5 @@ Index
    parallelism
    num_stability
    certificates
+   vs_theano
 
