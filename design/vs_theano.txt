@@ -1,0 +1,98 @@
+
+========================
+Improvements over Theano
+========================
+
+Tlaloc is meant to be, in a sense, the successor of Theano_, a Python
+package allowing the construction and compilation of expression graphs
+involving tensors on the CPU and GPU.
+
+.. _Theano: http://deeplearning.net/software/theano/
+
+There are several design issues about Theano that Tlaloc would aim to
+solve. Now, some of these might be fixable within Theano: for example,
+note that Theano now has a LazyLinker. There is also a shape inference
+mechanism now, and I am confident that interesting developments are
+yet to come. Nonetheless, the core structures seem to have limited
+scalability. At some point, trying to work around them to implement
+better features will be like hammering a square into a round hole. I
+also believe that significant improvements can be made on every front,
+which still amounts to a rewrite at the end of the day.
+
+Here are the areas I believe would be difficult to improve in Theano,
+but would naturally be addressed by Tlaloc:
+
+
+Python independence
+===================
+
+Theano uses numpy's data structures, piggybacks on Python's garbage
+collector, glues code with pure Python, has Python-only ops. We would
+prefer to be able to compile programs that do not depend on Python's
+runtime, and can collect their own garbage. This would allow us to
+make functions that can be used from C/C++ programs without spurious
+dependencies (or from programs written in other languages). It would
+bypass the global interpreter lock and make it easier to use a Python
+interpreter that isn't Cython.
+
+
+Compilation speed
+=================
+
+Building strings of C code and feeding them to GCC is not a
+particularly efficient compilation method. Using LLVM would be much
+faster, and so would generating assembly directly. Making the switch
+in Theano would be a lot of work on all levels and I believe it is
+likely to cause legacy compatibility hiccups.
+
+
+Scalability
+===========
+
+A Theano function is a large graph built by the user, equivalent to
+inlining all function calls up to the point where they are
+irreducible, primitive "Ops". This does not scale well. It is possible
+to alleviate this to some extent, using scan() for loops, or
+OpFromGraph for large abstractions, or other tricks, but the point is
+that Theano was not made to facilitate making Ops from other Ops, and
+that these new Ops would be ignored by the optimization engine if they
+existed.
+
+Composing a computation graph into a new Op should be trivial,
+functions should be first class, and the optimizer should be aware of
+the levels of code abstraction, for inlining and inference. Else,
+Theano will never really scale, except through kludges: you cannot
+scale if you inline everything, nor if building composite ops is
+difficult, nor if the optimizer only has a limited view of what is
+going on.
+
+Unfortunately, various design oversights in Theano make this
+difficult, such as Env and Op having different interfaces (even though
+they are both symbolic representations of a function) and the user
+structures being too tied to the compilation structures (thus the
+frontend and backend cannot be modified without interfering with each
+other).
+
+
+Inference
+=========
+
+The current inference mechanisms used by Theano are a kludge. Type is
+inferred through make_node, shape is inferred through an infer_shape
+method that was tacked on later, and any new thing to infer would
+essentially become another tacked on method. This clutters the
+implementation, and if a third party wants to infer more properties,
+they have to do it outside of the classes, which feels inconsistent. I
+much prefer the idea I presented in the :ref:`inference` section,
+which is both flexible and general. That is, at any time, given a
+function f(x, y), a function g can be registered to infer p(f(x, y))
+given q(x) and r(y).
+
+The optimizer could become much better if we could infer time and
+memory costs for the evaluation of expressions, as well as data
+transfer costs (so that we can actually *evaluate* whether we're
+improving the code or degrading it). A general inference mechanism
+would allow us to encode this information, and would scale to
+properties we might find useful in the future.
+
+
